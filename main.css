@@ -4,7 +4,7 @@ body {
     background: #f2f6e9;
 }
 .navbar {
-    background:#ada242;
+    background:#425bad;
 }
 .nav-link,
 .navbar-brand {
@@ -42,7 +42,7 @@ body {
     text-align: center;
 }
 .description h1 {
-    color: #6ab446;
+    color: #425bad;
 }
 .description p {
     color: #fff;
@@ -51,8 +51,8 @@ body {
 }
 
 .description button {
-    border:1px solid #6ab446;
-    background:#6ab446;
+    border:1px solid #425bad;
+    background:#425bad;
     border-radius: 0;
     color:#fff;
 }
