@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Spelling Cannon - Debug Version</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; touch-action: none; }
+        canvas { display: block; background: linear-gradient(#1a2a6c, #b21f1f, #fdbb2d); }
+        
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        button {
+            padding: 20px 40px; font-size: 24px; cursor: pointer;
+            border-radius: 15px; border: none; background: #4df3ff; color: #222;
+            font-weight: bold; margin: 10px;
+        }
+
+        #debug-log {
+            position: absolute; bottom: 10px; left: 10px; 
+            color: #0f0; font-family: monospace; font-size: 12px;
+            pointer-events: none; max-height: 100px; overflow: hidden;
+        }
+
+        #ui-top { position: absolute; top: 30px; width: 100%; text-align: center; color: white; pointer-events: none; }
+        #ui-bottom { position: absolute; bottom: 20px; width: 100%; text-align: center; color: #fff; pointer-events: none; }
+        #word-display { font-size: 4em; font-weight: bold; letter-spacing: 15px; background: rgba(0,0,0,0.3); padding: 10px 30px; border-radius: 50px; display: inline-block; }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1 style="color: white;">Spelling Cannon</h1>
+        <button id="start-btn">1. CLICK TO UNLOCK AUDIO</button>
+        <p style="color: #aaa;">After clicking, you should hear "System Ready"</p>
+    </div>
+
+    <div id="debug-log">Log: Initializing...</div>
+    <div id="ui-top"><h1 id="msg"></h1></div>
+    <div id="ui-bottom"><div id="word-display"></div></div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+const wordList = ["TRAFFIC", "FINISH", "GRAPH", "DOLPHIN", "PHOTO", "MARGIN", "GENTLE", "GINGER", "JOLLY", "JUNGLE", "NOISE", "NIGHT", "KNEEL", "WRINKLE", "RIPPLE", "FERRET", "WHISTLE", "WINDOW", "WESTERN", "BRITAIN"];
+const funnyMissPhrases = ["Come on man", "Yo what", "Oopsie", "Bruh"];
+
+const log = (txt) => {
+    const d = document.getElementById('debug-log');
+    d.innerHTML += "<br>> " + txt;
+    console.log(txt);
+};
+
+// --- SPEECH ENGINE ---
+let synth = window.speechSynthesis;
+
+function speak(text) {
+    if (!text) return;
+    log("Attempting to speak: " + text);
+    
+    // Cancel any existing speech
+    synth.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Important: Re-attach to synth on every call for Chrome/Safari stability
+    utterance.onstart = () => log("Speech started...");
+    utterance.onerror = (event) => log("Speech error: " + event.error);
+    
+    synth.speak(utterance);
+
+    // Chrome Bug Fix: If speech is "stuck", resume it
+    if (synth.speaking) {
+        synth.resume();
+    }
+}
+
+// --- GAME STATE ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const msgDisplay = document.getElementById('msg');
+const wordDisplay = document.getElementById('word-display');
+const overlay = document.getElementById('overlay');
+
+let currentWordIndex = 0;
+let currentLetterIndex = 0;
+let options = [];
+let particles = [];
+let cannonAngle = 0;
+let isAnimating = false;
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+document.getElementById('start-btn').addEventListener('click', () => {
+    log("Start button clicked.");
+    // Force speech immediately to unlock the context
+    speak("System Ready");
+    
+    setTimeout(() => {
+        overlay.style.display = 'none';
+        startWord();
+        draw();
+    }, 500);
+});
+
+function startWord() {
+    currentLetterIndex = 0;
+    updateWordProgress();
+    speak("Spell " + wordList[currentWordIndex]);
+    generateOptions();
+}
+
+function updateWordProgress() {
+    let word = wordList[currentWordIndex];
+    let html = "";
+    for(let i=0; i < word.length; i++) {
+        html += (i < currentLetterIndex) ? `<span style="color: #4df3ff;">${word[i]}</span>` : `<span style="color: rgba(255,255,255,0.3);">_</span>`;
+    }
+    wordDisplay.innerHTML = html;
+    msgDisplay.innerText = "Target: " + word[currentLetterIndex];
+}
+
+function generateOptions() {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const correctLetter = wordList[currentWordIndex][currentLetterIndex];
+    let choices = [correctLetter];
+    while(choices.length < 3) {
+        let r = alphabet[Math.floor(Math.random() * 26)];
+        if(!choices.includes(r)) choices.push(r);
+    }
+    choices.sort(() => Math.random() - 0.5);
+    options = choices.map((char, i) => ({ char, x: (canvas.width / 4) * (i + 1), y: 180, radius: 45, visible: true }));
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach((p, i) => {
+        ctx.fillStyle = `rgba(255, 255, 255, ${p.life})`;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill();
+        p.x += p.vx; p.y += p.vy; p.life -= 0.03;
+        if(p.life <= 0) particles.splice(i, 1);
+    });
+    options.forEach(opt => {
+        if(!opt.visible) return;
+        ctx.fillStyle = "white";
+        ctx.beginPath(); ctx.arc(opt.x, opt.y, opt.radius, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "#222"; ctx.font = "bold 50px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText(opt.char, opt.x, opt.y + 18);
+    });
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height - 250);
+    ctx.rotate(cannonAngle);
+    ctx.fillStyle = "#444"; ctx.fillRect(-25, -70, 50, 70);
+    ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    requestAnimationFrame(draw);
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+    if(isAnimating) return;
+    const rect = canvas.getBoundingClientRect();
+    const tx = e.clientX - rect.left;
+    const ty = e.clientY - rect.top;
+    cannonAngle = Math.atan2(ty - (canvas.height - 250), tx - (canvas.width / 2)) + Math.PI/2;
+    options.forEach(opt => {
+        if(!opt.visible) return;
+        if(Math.sqrt((tx - opt.x)**2 + (ty - opt.y)**2) < opt.radius) {
+            handleHit(opt);
+        }
+    });
+});
+
+function handleHit(opt) {
+    isAnimating = true;
+    const correctLetter = wordList[currentWordIndex][currentLetterIndex];
+    for(let i=0; i<15; i++) particles.push({ x: opt.x, y: opt.y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1.0 });
+    opt.visible = false;
+
+    if(opt.char === correctLetter) {
+        currentLetterIndex++;
+        if(currentLetterIndex >= wordList[currentWordIndex].length) {
+            speak("Correct!");
+            setTimeout(() => {
+                currentWordIndex = (currentWordIndex + 1) % wordList.length;
+                startWord();
+                isAnimating = false;
+            }, 1000);
+        } else {
+            updateWordProgress();
+            setTimeout(() => { generateOptions(); isAnimating = false; }, 500);
+        }
+    } else {
+        speak(funnyMissPhrases[Math.floor(Math.random() * funnyMissPhrases.length)]);
+        setTimeout(() => { isAnimating = false; }, 400);
+    }
+}
+</script>
+</body>
+</html>
