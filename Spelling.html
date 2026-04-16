@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spelling Cannon - Debug Version</title>
+    <title>Spelling Cannon</title>
     <style>
         body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; touch-action: none; }
         canvas { display: block; background: linear-gradient(#1a2a6c, #b21f1f, #fdbb2d); }
@@ -19,13 +19,6 @@
             font-weight: bold; margin: 10px;
         }
 
-        #debug-log {
-            position: absolute; bottom: 10px; left: 10px; 
-            color: #0f0; font-family: monospace; font-size: 12px;
-            pointer-events: none; max-height: 100px; overflow: hidden;
-        }
-
-        #ui-top { position: absolute; top: 30px; width: 100%; text-align: center; color: white; pointer-events: none; }
         #ui-bottom { position: absolute; bottom: 20px; width: 100%; text-align: center; color: #fff; pointer-events: none; }
         #word-display { font-size: 4em; font-weight: bold; letter-spacing: 15px; background: rgba(0,0,0,0.3); padding: 10px 30px; border-radius: 50px; display: inline-block; }
     </style>
@@ -34,53 +27,23 @@
 
     <div id="overlay">
         <h1 style="color: white;">Spelling Cannon</h1>
-        <button id="start-btn">1. CLICK TO UNLOCK AUDIO</button>
-        <p style="color: #aaa;">After clicking, you should hear "System Ready"</p>
+        <button id="start-btn">TAP TO START</button>
     </div>
 
-    <div id="debug-log">Log: Initializing...</div>
-    <div id="ui-top"><h1 id="msg"></h1></div>
-    <div id="ui-bottom"><div id="word-display"></div></div>
+    <div id="ui-bottom">
+        <div id="word-display"></div>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
 
 <script>
-const wordList = ["TRAFFIC", "FINISH", "GRAPH", "DOLPHIN", "PHOTO", "MARGIN", "GENTLE", "GINGER", "JOLLY", "JUNGLE", "NOISE", "NIGHT", "KNEEL", "WRINKLE", "RIPPLE", "FERRET", "WHISTLE", "WINDOW", "WESTERN", "BRITAIN"];
-const funnyMissPhrases = ["Come on man", "Yo what", "Oopsie", "Bruh"];
+/** * CONFIGURATION: Add your son's spelling words here! 
+ */
+const wordList = ["APPLE", "TIGER", "HOUSE", "SMILE", "CLOUD"];
+const funnyMissPhrases = ["Come on man", "Yo what", "Oopsie", "Bruh", "It's okay to have an oopsy"];
 
-const log = (txt) => {
-    const d = document.getElementById('debug-log');
-    d.innerHTML += "<br>> " + txt;
-    console.log(txt);
-};
-
-// --- SPEECH ENGINE ---
-let synth = window.speechSynthesis;
-
-function speak(text) {
-    if (!text) return;
-    log("Attempting to speak: " + text);
-    
-    // Cancel any existing speech
-    synth.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    
-    // Important: Re-attach to synth on every call for Chrome/Safari stability
-    utterance.onstart = () => log("Speech started...");
-    utterance.onerror = (event) => log("Speech error: " + event.error);
-    
-    synth.speak(utterance);
-
-    // Chrome Bug Fix: If speech is "stuck", resume it
-    if (synth.speaking) {
-        synth.resume();
-    }
-}
-
-// --- GAME STATE ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const msgDisplay = document.getElementById('msg');
 const wordDisplay = document.getElementById('word-display');
 const overlay = document.getElementById('overlay');
 
@@ -90,6 +53,7 @@ let options = [];
 let particles = [];
 let cannonAngle = 0;
 let isAnimating = false;
+let synth = window.speechSynthesis;
 
 function resize() {
     canvas.width = window.innerWidth;
@@ -98,11 +62,17 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+function speak(text) {
+    if (!text) return;
+    synth.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9;
+    synth.speak(utterance);
+    if (synth.speaking) { synth.resume(); }
+}
+
 document.getElementById('start-btn').addEventListener('click', () => {
-    log("Start button clicked.");
-    // Force speech immediately to unlock the context
     speak("System Ready");
-    
     setTimeout(() => {
         overlay.style.display = 'none';
         startWord();
@@ -113,7 +83,8 @@ document.getElementById('start-btn').addEventListener('click', () => {
 function startWord() {
     currentLetterIndex = 0;
     updateWordProgress();
-    speak("Spell " + wordList[currentWordIndex]);
+    // Announce the word clearly at the start
+    speak("Spell the word: " + wordList[currentWordIndex]);
     generateOptions();
 }
 
@@ -124,7 +95,6 @@ function updateWordProgress() {
         html += (i < currentLetterIndex) ? `<span style="color: #4df3ff;">${word[i]}</span>` : `<span style="color: rgba(255,255,255,0.3);">_</span>`;
     }
     wordDisplay.innerHTML = html;
-    msgDisplay.innerText = "Target: " + word[currentLetterIndex];
 }
 
 function generateOptions() {
@@ -136,17 +106,27 @@ function generateOptions() {
         if(!choices.includes(r)) choices.push(r);
     }
     choices.sort(() => Math.random() - 0.5);
-    options = choices.map((char, i) => ({ char, x: (canvas.width / 4) * (i + 1), y: 180, radius: 45, visible: true }));
+    options = choices.map((char, i) => ({ 
+        char, 
+        x: (canvas.width / 4) * (i + 1), 
+        y: 180, 
+        radius: 45, 
+        visible: true 
+    }));
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Explosions
     particles.forEach((p, i) => {
         ctx.fillStyle = `rgba(255, 255, 255, ${p.life})`;
         ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill();
         p.x += p.vx; p.y += p.vy; p.life -= 0.03;
         if(p.life <= 0) particles.splice(i, 1);
     });
+
+    // Bubbles
     options.forEach(opt => {
         if(!opt.visible) return;
         ctx.fillStyle = "white";
@@ -154,12 +134,15 @@ function draw() {
         ctx.fillStyle = "#222"; ctx.font = "bold 50px sans-serif"; ctx.textAlign = "center";
         ctx.fillText(opt.char, opt.x, opt.y + 18);
     });
+
+    // Cannon
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height - 250);
     ctx.rotate(cannonAngle);
     ctx.fillStyle = "#444"; ctx.fillRect(-25, -70, 50, 70);
     ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(0, 0, 40, 0, Math.PI*2); ctx.fill();
     ctx.restore();
+
     requestAnimationFrame(draw);
 }
 
@@ -180,18 +163,20 @@ canvas.addEventListener('pointerdown', (e) => {
 function handleHit(opt) {
     isAnimating = true;
     const correctLetter = wordList[currentWordIndex][currentLetterIndex];
+    
+    // Explosion effect
     for(let i=0; i<15; i++) particles.push({ x: opt.x, y: opt.y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1.0 });
     opt.visible = false;
 
     if(opt.char === correctLetter) {
         currentLetterIndex++;
         if(currentLetterIndex >= wordList[currentWordIndex].length) {
-            speak("Correct!");
+            speak("Awesome! You spelled " + wordList[currentWordIndex]);
             setTimeout(() => {
                 currentWordIndex = (currentWordIndex + 1) % wordList.length;
                 startWord();
                 isAnimating = false;
-            }, 1000);
+            }, 1200);
         } else {
             updateWordProgress();
             setTimeout(() => { generateOptions(); isAnimating = false; }, 500);
